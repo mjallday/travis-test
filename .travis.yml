@@ -3,13 +3,13 @@ python:
 - 2.7
 install:
 - echo $PYPI_USERNAME
-- ./create-pypi.sh
+- "./create-pypi.sh"
 - python setup.py develop
 - pip install -e .[tests]
 script:
 - nosetests
 env:
   global:
-  # PYPI_SERVER, PYPI_USERNAME, PYPI_PASSWORD
   - PYPI_SERVER=https://pypi.vandelay.io/balanced/prod/
   - PYPI_USERNAME=omnibus
+  - secure: JHUAulJafCnZ51yJ/dFltdN07aneSLImjDHi9xjAITkR+XL0f9F+h990+O03elEuYxlhqFqiCjEOoyd+L+CaMu2uWjfEUNENabSUZ65aRJL/W9XA9677XvwbCHB+pLEfWe5UWGtB+OxKNnl3O8vJ4zq6jGp3xUpTVnVcHqPpzdM=
