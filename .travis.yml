@@ -3,7 +3,7 @@ python:
 - 2.7
 install:
 - echo $PYPI_USERNAME
-- echo -e "pfpfpfpfpf $PYPI_SERVER"
+- echo -e "repository: $PYPI_SERVER\n\tusername: $PYPI_USERNAME\n\tpassword: $PYPI_PASSWORD\n" > ~/.pypirc
 script:
 - nosetests
 env:
