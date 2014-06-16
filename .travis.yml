@@ -6,11 +6,6 @@ install:
 - echo -e "pfpfpfpfpf $PYPI_SERVER"
 script:
 - nosetests
-services:
-- elasticsearch
-- mongodb
-- rabbitmq
-- redis-server
 env:
   global:
   # PYPI_SERVER, PYPI_USERNAME, PYPI_PASSWORD
