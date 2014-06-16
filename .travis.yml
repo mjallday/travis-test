@@ -4,7 +4,7 @@ python:
 install:
 - echo $PYPI_USERNAME
 - python setup.py develop
-- echo -e "pfpfpfpfpf"
+- echo -e "pfpfpfpfpf $PYPI_SERVER"
 script:
 - nosetests
 services:
