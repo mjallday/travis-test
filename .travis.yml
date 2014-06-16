@@ -4,11 +4,8 @@ python:
 install:
 - echo $PYPI_USERNAME
 - "./create-pypi.sh"
-- pip install -U setuptools
-- pip install https://pypi.python.org/packages/source/S/SQLAlchemy/SQLAlchemy-0.8.4.tar.gz#md5=fd517e1bb4031cac1e3fa00108111b38
-- pip install https://pypi.python.org/packages/source/r/redis/redis-2.9.1.tar.gz#md5=1da8ff78be75d7acf5d4684e77fc3606
-- python setup.py develop
 - pip install -e .[tests]
+- python setup.py develop
 script:
 - nosetests
 env:
