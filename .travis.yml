@@ -4,7 +4,7 @@ python:
 install:
 - echo $PYPI_USERNAME
 - "./create-pypi.sh"
-- pip install -e .[tests]
+- pip install -e .[tests] --extra-index-url=https://$PYPI_USERNAME:$PYPI_PASSWORD@pypi.vandelay.io/balanced/prod/+simple/
 - python setup.py develop
 script:
 - nosetests
