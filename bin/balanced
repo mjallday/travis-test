@@ -1,0 +1,336 @@
+#!/usr/bin/env python
+"""
+Control script with usage:
+
+    balanced --help
+
+e.g.
+
+.. code:: bash::
+
+    balanced shell -l debug
+
+"""
+import argparse
+import functools
+import logging
+import os
+import sys
+import wsgiref.simple_server
+
+import balanced_service
+from balanced_service.cmds import (
+    invoices,
+    queues,
+    marketplaces,
+    paypal_payouts,
+    reconcile_staged_txns,
+    cache_amount,
+    reporting,
+    notify,
+    stats,
+    merchants,
+)
+from balanced_service.resource_apps import Rev1
+
+
+logger = logging.getLogger('balanced')
+
+
+# shell
+
+def shell_arg_parser(cmds, parents):
+    cmd = cmds.add_parser(
+        'shell',
+        parents=parents,
+        description='interactive shell',
+    )
+    cmd.add_argument(
+        'type',
+        nargs='?',
+        default='auto',
+        choices=['auto', 'native', 'ipython'],
+        metavar='TYPE',
+        help='TYPE of shell',
+    )
+    cmd.set_defaults(cmd=shell_cmd)
+    return cmd
+
+
+def shell_cmd(args):
+    namespace = {
+        'conf_file': args.conf_file,
+        'Session': balanced_service.db.Session,
+    }
+    namespace.update(dict(
+        (attr, getattr(balanced_service, attr))
+        for attr in balanced_service.__all__
+    ))
+    namespace.update(dict(
+        (attr, getattr(balanced_service.models, attr))
+         for attr in balanced_service.models.__all__
+    ))
+
+    app = Rev1()
+    with app.test_request_context():
+        if args.type == 'native':
+            return shell_native(namespace)
+        elif args.type == 'ipython':
+            return shell_ipython(namespace)
+        elif args.type == 'auto':
+            try:
+                return shell_ipython(namespace)
+            except ImportError:
+                return shell_native(namespace)
+
+
+def shell_native(namespace):
+    # http://stackoverflow.com/a/5597918
+    try:
+        import readline
+    except ImportError:
+        pass
+    import code
+    shell = code.InteractiveConsole(namespace)
+    return shell.interact()
+
+
+def shell_ipython(namespace):
+    def embed_13():
+        from IPython import embed
+        return embed(user_ns=namespace)
+
+    def embed_11():
+        from IPython.terminal.embed import InteractiveShellEmbed
+        return InteractiveShellEmbed(user_ns=namespace)
+
+    def embed_0():
+        from IPython.Shell import IPShellEmbed
+        return IPShellEmbed(user_ns=namespace)
+
+    embeds = [embed_13, embed_11, embed_0]
+    while embeds:
+        embed = embeds.pop()
+        try:
+            embed()
+        except Exception:
+            if embeds:
+                continue
+            raise
+
+
+# serve requests
+
+def serve_arg_parser(cmds, parents):
+    cmd = cmds.add_parser(
+        'serve',
+        parents=parents,
+        description='serve requests',
+    )
+    cmd.add_argument(
+        '--host', default='127.0.0.1',
+    )
+    cmd.add_argument(
+        '--port', type=int, default=5000,
+    )
+    cmd.add_argument(
+        '--proxied', action='store_true', default=False,
+    )
+    cmd.add_argument(
+        '--stats', action='store_true', default=False,
+    )
+    cmd.set_defaults(cmd=serve_cmd)
+
+
+def serve_cmd(args):
+
+    def stringify_headers(next_app):
+
+        def _start_response(start_response, status, response_headers, exc_info=None):
+            return start_response(
+                status,
+                [(str(k), v) for k, v in response_headers],
+                exc_info
+            )
+
+        def _middleware(environ, start_response):
+
+            return next_app(environ, functools.partial(_start_response, start_response))
+
+        return _middleware
+
+    wsgi_app = balanced_service.Dispatcher()
+    wsgi_app = balanced_service.apply_middleware(
+        wsgi_app, proxied=args.proxied, stats=args.stats,
+    )
+    wsgi_app = stringify_headers(wsgi_app)
+    server = wsgiref.simple_server.make_server(
+        args.host, args.port, wsgi_app,
+    )
+    logger.info('serving on %s:%s ...', *server.server_address)
+    server.serve_forever()
+
+
+# consume messages
+
+def consume_arg_parser(cmds, parents):
+    cmd = cmds.add_parser(
+        'consume',
+        parents=parents,
+        description='consume messages',
+    )
+    cmd.add_argument(
+        'queue_filter', nargs='*',
+    )
+    cmd.add_argument(
+        '-j', '--concurrency', type=int, default=0,
+    )
+    cmd.add_argument(
+        '-g', '--green', action='store_true', default=False,
+    )
+    cmd.add_argument(
+        '-r', '--read-only', action='store_true', default=False,
+    )
+    cmd.add_argument(
+        '--stats', action='store_true', default=False,
+    )
+    cmd.set_defaults(cmd=consume_cmd)
+
+    return cmd
+
+
+def consume_cmd(args):
+    return balanced_service.messages.consume(
+        app=balanced_service.resource_apps.Rev0(),
+        queue_filter=args.queue_filter,
+        concurrency=args.concurrency,
+        green=args.green,
+        read_only=args.read_only,
+        stats=args.stats,
+    )
+
+
+# main
+
+def create_arg_parser():
+
+    class LogLevelAction(argparse.Action):
+
+        mapping = {
+            'd': logging.DEBUG,
+            'debug': logging.DEBUG,
+            'i': logging.INFO,
+            'info': logging.INFO,
+            'w': logging.WARNING,
+            'warn': logging.WARNING,
+            'e': logging.ERROR,
+            'err': logging.ERROR,
+            'error': logging.ERROR,
+        }
+
+        def __call__(self, parser, namespace, values, option_string=None):
+            if isinstance(values, list):
+                values = [self.mapping[v] for v in values]
+            else:
+                values = self.mapping[values]
+            setattr(namespace, self.dest, values)
+
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        '-l', '--log-level',
+        choices=[
+            'd', 'debug', 'i', 'info', 'w', 'warn', 'e', 'err', 'error'
+        ],
+        default=logging.WARNING,
+        metavar='LEVEL',
+        help='log LEVEL',
+        action=LogLevelAction,
+    )
+    common.add_argument(
+        '-s', '--log-config',
+        default=None,
+        metavar='FILE',
+        help='log configuration FILE',
+    )
+    default_conf_file = '/etc/balanced/balanced.conf'
+    if not os.path.isfile(default_conf_file):
+        default_conf_file = '-'
+    common.add_argument(
+        '-c', '--conf-file',
+        metavar='FILE',
+        default=os.getenv('BALANCED_CONF', default_conf_file),
+        help='configuration FILE, defaults to BALANCED_CONF, use - for defaults',
+    )
+    common.add_argument(
+        '-w', '--writeable',
+        action='store_true',
+        default=False
+    )
+    parents = [common]
+
+    parser = argparse.ArgumentParser(
+        version=balanced_service.__version__,
+        parents=parents,
+        description='',
+    )
+    cmds = parser.add_subparsers(title='cmds')
+
+    shell_arg_parser(cmds, parents)
+    consume_arg_parser(cmds, parents)
+    serve_arg_parser(cmds, parents)
+    invoices.create_arg_parser(cmds, parents)
+    queues.create_arg_parser(cmds, parents)
+    marketplaces.create_arg_parser(cmds, parents)
+    paypal_payouts.create_arg_parser(cmds, parents)
+    reporting.create_arg_parser(cmds, parents)
+    notify.create_arg_parser(cmds, parents)
+    stats.create_arg_parser(cmds, parents)
+    reconcile_staged_txns.create_arg_parser(cmds, parents)
+    cache_amount.create_arg_parser(cmds, parents)
+    merchants.create_arg_parser(cmds, parents)
+
+    return parser
+
+
+def setup_logging(args):
+    if args.log_config:
+        try:
+            logging.config.dictConfig(eval(open(args.log_config, 'r').read()))
+            logging.getLogger().setLevel(args.log_level)
+        except Exception, ex:
+            print >> sys.stderr, 'unable to load "{}" - {}'.format(
+                args.log_config, str(ex)
+            )
+            logging.basicConfig(
+                level=args.log_level,
+                format='%(asctime)s : %(levelname)s : %(name)s : %(message)s',
+                stream=sys.stderr,
+            )
+    else:
+        logging.basicConfig(
+            level=args.log_level,
+            format='%(asctime)s : %(levelname)s : %(name)s : %(message)s',
+            stream=sys.stderr,
+        )
+
+
+def main():
+    arg_parser = create_arg_parser()
+    args = arg_parser.parse_args()
+    setup_logging(args)
+    balanced_service.init(args.conf_file)
+    if args.cmd not in (
+        shell_cmd,
+    ) or args.writeable:
+        result = args.cmd(args)
+    else:
+        logger.warn('This is a read-only shell by default!')
+        with balanced_service.db.read_only_cxn():
+            result = args.cmd(args)
+    if result is None:
+        result = 0
+    sys.exit(result)
+
+
+if __name__ == '__main__':
+    main()
