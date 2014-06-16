@@ -4,6 +4,8 @@ python:
 install:
 - echo $PYPI_USERNAME
 - ./create-pypi.sh
+- python setup.py develop
+- pip install -e .[tests]
 script:
 - nosetests
 env:
