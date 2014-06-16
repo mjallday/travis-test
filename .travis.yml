@@ -19,4 +19,3 @@ env:
   # PYPI_SERVER, PYPI_USERNAME, PYPI_PASSWORD
   - PYPI_SERVER=https://pypi.vandelay.io/balanced/prod/
   - PYPI_USERNAME=omnibus
-  - secure: VepIKDWKOKGw5VrekBcXlz/0yfHAz3Cr+qBf2bTwR7LfmQlW2VofNEbnhnzLQDJM0L9JbtzeQ1Xq0/0ewHhDRDwNs3Kqacxmf8fzjJholI2ys9LAJbC8FqKzHcuKfXVb+RMK1PiXIAEq/AJtHUVRWlHqUJffS5YX7Y5KA+wiTco=
