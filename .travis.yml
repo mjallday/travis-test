@@ -1,0 +1,42 @@
+language: python
+python:
+- 2.7
+install:
+- echo $PYPI_USERNAME
+- echo -e "[distutils]\\n\tpypi\n\tbalanced\n\n[balanced]\n\trepository: $PYPI_SERVER\n\tusername: $PYPI_USERNAME\n\tpassword: $PYPI_PASSWORD\n" > ~/.pypirc
+- python setup.py develop
+- pip install coverage==3.5.3
+- pip install nose==1.3.0
+- pip install nosexcover==1.0.10
+- pip install nose-cov==1.6
+- pip install nose_xunitmp==0.3.1
+- pip install pep8 pylint --upgrade
+- pip install lxml
+- pip install cov-core==1.8
+- pip install -e .[tests]
+script:
+- nosetests --processes=4 -sv --with-xunitmp --with-cov --cov=balanced_service --cov-report
+  term-missing
+- coverage combine
+- coverage report
+- coverage xml
+- find balanced_service -name \*.py \ | xargs $PYENV_HOME/bin/pep8 --ignore=E711 | tee pep8.out
+after_success:
+- coverage.py coverage.xml balanced_service.models:91 balanced_service.resources:92
+before_script:
+- psql -c 'create user balanced with superuser;' -U postgres
+- psql -c 'create database balanced with owner = balanced;' -U postgres
+- "./scripts/recreate-test"
+addons:
+  postgresql: '9.1'
+services:
+- elasticsearch
+- mongodb
+- rabbitmq
+- redis-server
+env:
+  global:
+  # PYPI_SERVER, PYPI_USERNAME, PYPI_PASSWORD
+  - PYPI_SERVER=https://pypi.vandelay.io/balanced/prod/
+  - PYPI_USERNAME=omnibus
+  - secure: VepIKDWKOKGw5VrekBcXlz/0yfHAz3Cr+qBf2bTwR7LfmQlW2VofNEbnhnzLQDJM0L9JbtzeQ1Xq0/0ewHhDRDwNs3Kqacxmf8fzjJholI2ys9LAJbC8FqKzHcuKfXVb+RMK1PiXIAEq/AJtHUVRWlHqUJffS5YX7Y5KA+wiTco=
