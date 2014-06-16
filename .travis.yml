@@ -4,7 +4,7 @@ python:
 install:
 - echo $PYPI_USERNAME
 - python setup.py develop
-- echo -e "$PYPI_SERVER\n\tusername: $PYPI_USERNAME\n\tpassword: $PYPI_PASSWORD\n"
+- echo -e "pfpfpfpfpf"
 script:
 - nosetests
 services:
